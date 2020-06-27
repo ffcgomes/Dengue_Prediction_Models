@@ -1,0 +1,113 @@
+
+#Visualização e Previsão de Séries Temporais de Casos de Dengue no Sobral
+
+#SINOPSE
+
+#Para esta análise, usaremos a análise temporal espacial para encontrar padrões nos #casos de dengue no Ceará de janeiro de 2007 a dezembro de 2019 cidade. Também #construiremos um modelo de série temporal usando um algoritmo automatizado.
+
+#Load needed libraries
+library("ggplot2") #Visualization
+library("ggfortify") #Visualization
+library("tseries") #Statistical Tests for Time Series data
+library("forecast") #Modeling and Forecasting
+library(shiny)
+
+#Set up our dataset
+
+#library(rio)
+#file.choose()
+#infectados = import("C:\\Users\\BiaVitoria\\Google Drive\\DS\\_Modelos_Machine_Learning\\Arima\\infectadosSobral.csv")
+
+infectados<-read.csv("infectadosSobralSem2007.csv",h=T)
+head(infectados)
+summary(infectados)
+infectados$semana = factor(infectados$semana)
+infectados$cidade = factor(infectados$cidade)
+str(infectados)
+
+#Análise espacial temporal
+#Utilizaremos a análise espacial temporal para encontrar padrões e tendências em nosso #conjunto de dados
+
+infectadosPorCidade = aggregate(infectados~semana+cidade,infectados,sum)
+#infectadosPorCidade
+str(infectadosPorCidade)
+summary(infectadosPorCidade)
+
+#Temporal Spatial Heatmap
+#Temporal Spatial Heatmap
+ggplot(infectadosPorCidade,aes(semana,cidade,fill=infectados))+geom_tile()+
+  scale_fill_gradient2(low = "white",mid = "blue",high = "red",midpoint = 500)+
+  scale_x_discrete(breaks = c(seq(2008,2017,1)))+ xlab(label="Semana")+ylab(label="Cidade")+
+  ggtitle("Casos de Dengue por semana e por cidade")+
+  theme(
+    axis.title.x = element_text(size=10, face="bold"),
+    axis.title.y = element_text(size=10, face="bold"))
+
+#Gráfico de Séries Temporais
+#Podemos investigar a tendência para todo o estado usando um gráfico de séries #temporais. Agregaremos nossos dados de cidade para extrapolar valores para toda o #Ceará
+
+infectadosPorAno<-aggregate(infectados~semana+ano,infectados,sum)
+str(infectadosPorAno)
+#infectadosPorAno
+
+#Converte dados para Série Temporal
+
+infectadosPorAnoST<-ts(infectadosPorAno$infectados,c(2008,1),c(2019,12),12)
+#Plot Série Temporal
+autoplot(infectadosPorAnoST)+xlab(label = "TIME")+
+  ylab(label = "Casos de Infectados")+
+  ggtitle("Infectados pro dengue no Ceará")
+
+
+A parcela exploratória acima cimentou nossa constatação no gráfico anterior de que os casos de dengue foram relativamente maiores entre 2012 e 2014, mas também revela uma aparente baixa sazonalidade nos dados agrupados . 
+
+Com esses dados, usaremos a função decompor em R. Continuando a usar ggfortify para plotagens, em uma linha, plote automaticamente esses componentes decompostos para analisar melhor os dados.
+
+autoplot(decompose(infectadosPorAnoST))
+
+#Nestas parcelas decompostas, podemos ver novamente a tendência e a sazonalidade #conforme inferidas anteriormente, mas também podemos observar a estimativa do #componente aleatório representado no "remainder"
+
+
+
+#Testar estacionariedade de dados de séries temporais
+adf.test((infectadosPorAnoST))
+
+#Como nosso valor p é menor que nosso nível de significância de 0,05, podemos concluir #que nossos dados de séries temporais são estacionários. Nas estatísticas, um conjunto #de dados de séries temporais não estacionárias geralmente leva a uma regressão espúria. Uma série temporal estacionária é aquela cujas propriedades estatísticas como média, variação, autocorrelação etc. são constantes ao longo do tempo. A maioria dos métodos de previsão estatística baseia-se no pressuposto de que as séries temporais podem ser renderizadas aproximadamente estacionárias (isto é, "estacionadas") através do uso de transformações matemáticas. Uma série estacionarizada é relativamente fácil de prever: você simplesmente prevê que suas propriedades estatísticas serão as mesmas no futuro, como no passado! Estacionar uma série temporal através da diferenciação (quando necessário) é uma parte importante do processo de adaptação de um modelo ARIMA, que usaríamos para prever valores futuros de casos de dengue no Ceará. Como o P-value foi próximo de 0,05, vamos considerar a série como não estacionária
+
+#Verifique o número de diferenças de lag / s necessárias para estacionarizar séries temporais
+
+
+ndiffs(infectadosPorAnoST)
+
+#Parece que precisamos de uma diferenciação de lag 1 para estacionarizar nossos dados
+
+#Perform lag 1 differencing
+infectadosPorAnoSTDiff<-diff(infectadosPorAnoST)
+#Plot differenced data
+autoplot(infectadosPorAnoSTDiff)
+
+#Check stationarity of differenced data
+adf.test(infectadosPorAnoSTDiff)
+
+#Agora temos uma série temporal estacionária. Agora estamos prontos para construir um #modelo!
+
+#Modelagem ARIMA
+
+
+infectados_arima<-auto.arima(infectadosPorAnoST)
+infectados_arima
+
+#Utilizamos a função auto.arima () do pacote "forecast". Ele recomendou uma função autorregressiva do atraso 3 (p), com diferenciação do atraso 1 (d), e o modelo móvel móvel do atraso 2. Não usamos os dados diferenciados, mas o conjunto de dados real em vez disso, para demonstrar que a função auto.arima () identificou com êxito o número de diferenças de lag necessário para estacionarizar nossos dados.
+
+#PREVISÃO DA SÉRIE DE TEMPO - Agora que temos nosso modelo, podemos utilizá-lo para fazer previsões para os valores do próximo ano.
+
+#Fazer previsão para 2020
+infectados_previsao<-forecast(infectados_arima,12)
+#Plot previsao
+autoplot(infectados_previsao)+
+  ylab(label = "Previsão de Casos de Dengue - Ceará")
+
+#Com base nos valores previstos do nosso modelo, verificamos não ser possível prever casos de dengue a partir de dados agregados de todo o estado.
+
+#Proximo passo, retirar Fortaleza e ver como fica
+#Proximo passo seria fazer o modelo individualmente para cada cidade.
